@@ -7,6 +7,7 @@ import re
 
 app = Flask(__name__)
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
+
 application = ApplicationBuilder().token(BOT_TOKEN).build()
 
 verified_users = {}
@@ -108,15 +109,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("✅ Your reply has been sent anonymously.")
                 return
 
+# Register handlers
 application.add_handler(CommandHandler("start", start))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-@app.route("/startbot")
-def start_bot():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+@app.route('/')
+def home():
+    return 'FlexTeaBot is running!'
+
+@app.before_first_request
+def activate_bot():
+    loop = asyncio.get_event_loop()
     loop.create_task(application.run_polling())
-    return "Bot started via polling."
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
