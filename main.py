@@ -50,7 +50,8 @@ def emotion_shield(text):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     await update.message.reply_text(
-        f"👋 Hey {user.first_name or 'there'}!
+ f"👋 Hey {user.first_name or 'there'}! Welcome to FlexTea 🍵"
+
 "
         "Welcome to FlexTea 🍵 — your anonymous sharing bot.
 
