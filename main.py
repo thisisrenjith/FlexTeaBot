@@ -1,14 +1,20 @@
 from flask import Flask, request
 import os
-from telegram import Update, Bot, constants
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
-import asyncio
 import re
+import asyncio
+from telegram import Update, Bot, constants
+from telegram.ext import (
+    ApplicationBuilder, CommandHandler, MessageHandler,
+    ContextTypes, filters
+)
 
+# --- Config ---
+BOT_TOKEN = os.getenv("BOT_TOKEN", "7971742600:AAGUhFXL7m9qyJTuMmmCGOEk-40xC7SpJRg")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL", f"https://your-domain.com/webhook/{BOT_TOKEN}")  # Replace with actual URL
+
+# --- Flask App ---
 app = Flask(__name__)
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-
-application = ApplicationBuilder().token(BOT_TOKEN).build()
+bot_app = ApplicationBuilder().token(BOT_TOKEN).build()
 
 verified_users = {}
 user_groups = {}
@@ -26,6 +32,7 @@ def emotion_shield(text):
         return False
     return True
 
+# --- Telegram Handlers ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Welcome to FlexTea 🍵\nPlease reply with your Office/Store/Team name for verification.")
 
@@ -109,18 +116,32 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("✅ Your reply has been sent anonymously.")
                 return
 
-# Register handlers
-application.add_handler(CommandHandler("start", start))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+# --- Register handlers ---
+bot_app.add_handler(CommandHandler("start", start))
+bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-@app.route('/')
+# --- Webhook Endpoint ---
+@app.route(f"/webhook/{BOT_TOKEN}", methods=["POST"])
+async def webhook():
+    if request.method == "POST":
+        update_data = request.get_json(force=True)
+        update = Update.de_json(update_data, bot_app.bot)
+        await bot_app.process_update(update)
+        return {"ok": True}
+    return {"status": "Webhook running"}
+
+# --- Root route for health checks ---
+@app.route("/")
 def home():
-    return 'FlexTeaBot is running!'
+    return "FlexTeaBot is alive!"
 
+# --- Set webhook when Flask starts ---
 @app.before_first_request
-def activate_bot():
-    loop = asyncio.get_event_loop()
-    loop.create_task(application.run_polling())
+def setup_webhook():
+    bot = Bot(BOT_TOKEN)
+    asyncio.run(bot.set_webhook(WEBHOOK_URL))
 
+# --- Run Flask ---
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
