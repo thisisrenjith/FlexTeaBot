@@ -1,4 +1,3 @@
-
 """
 FlexTeaBot — Smart. Friendly. Anonymous.
 Created by: Renjith Rajeev (@thisisrenjith)
@@ -37,7 +36,7 @@ comfort_queue = {}
 CATEGORIES = ["Gossip", "Suggestion", "Complaint", "Appreciation"]
 AUDIENCES = ["My Office", "A Specific Store", "A Specific Team", "All Flexway"]
 
-# === Emotion Filter ===
+# === Utility Functions ===
 def emotion_shield(text):
     rude_words = ["sucks", "hate", "stupid", "idiot", "trash", "useless", "dog"]
     if any(w in text.lower() for w in rude_words):
@@ -46,96 +45,62 @@ def emotion_shield(text):
         return False
     return True
 
-# === Telegram Handlers ===
+# === Handler Functions ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    await update.message.reply_text(
- f"👋 Hey {user.first_name or 'there'}! Welcome to FlexTea 🍵"
-
-"
-        "Welcome to FlexTea 🍵 — your anonymous sharing bot.
-
-"
+    msg = (
+        f"👋 Hey {user.first_name or 'there'}!\n"
+        "Welcome to FlexTea 🍵 — your anonymous sharing bot.\n\n"
         "🧭 First, reply with your *Outlet/Team Name* to verify."
     )
+    await update.message.reply_text(msg, parse_mode=constants.ParseMode.MARKDOWN)
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    text = update.message.text.strip()
+async def handle_verification(user_id, text, update):
+    verified_users[user_id] = True
+    user_groups[user_id] = {"group": text}
+    await update.message.reply_text(f"✅ You’re verified under group: {text}")
 
-    # Outlet registration
-    if user_id not in verified_users:
-        verified_users[user_id] = True
-        user_groups[user_id] = {"group": text}
-        await update.message.reply_text(f"✅ You’re verified under group: {text}")
-        return
+async def prompt_category(update):
+    cat_msg = "📢 What would you like to post?\n" + "\n".join([f"{i+1}. {c}" for i, c in enumerate(CATEGORIES)])
+    await update.message.reply_text(cat_msg)
 
-    # Start spill
-    if text.lower() == "/spill":
-        cat_msg = "📢 What would you like to post?
-" + "\n".join([f"{i+1}. {c}" for i, c in enumerate(CATEGORIES)])
-        await update.message.reply_text(cat_msg)
-        return
+async def prompt_audience(update):
+    aud_msg = "👥 Who should see this?\n" + "\n".join([f"{i+1}. {a}" for i, a in enumerate(AUDIENCES)])
+    await update.message.reply_text(aud_msg)
 
-    # Handle category selection
-    if text.isdigit() and int(text) in range(1, len(CATEGORIES)+1):
-        category = CATEGORIES[int(text)-1]
-        verified_users[user_id] = {"category": category}
-        aud_msg = "👥 Who should see this?
-" + "\n".join([f"{i+1}. {a}" for i, a in enumerate(AUDIENCES)])
-        await update.message.reply_text(aud_msg)
-        return
+async def post_message(user_id, text, context, update):
+    category = verified_users[user_id]["category"]
+    audience = verified_users[user_id]["audience"]
+    msg_id = f"MSG{len(message_inbox)+1}"
+    message_inbox[msg_id] = user_id
+    comfort_queue[msg_id] = []
 
-    # Audience selection
-    if isinstance(verified_users[user_id], dict) and "category" in verified_users[user_id]:
-        if text.isdigit() and int(text) in range(1, len(AUDIENCES)+1):
-            audience = AUDIENCES[int(text)-1]
-            verified_users[user_id]["audience"] = audience
-            await update.message.reply_text("💬 Now type your message to post anonymously:")
-            return
+    group = user_groups[user_id]["group"]
+    targets = [uid for uid, g in user_groups.items() if audience == "All Flexway" or g["group"] == group]
 
-        # Final message posting
-        if "audience" in verified_users[user_id]:
-            if not emotion_shield(text):
-                await update.message.reply_text("⚠️ Please rephrase your message politely.")
-                return
+    for t_id in targets:
+        if t_id != user_id:
+            try:
+                await context.bot.send_message(
+                    chat_id=t_id,
+                    text=f"🍵 *{category}* #{msg_id}\n{text}\n\n💬 Reply anonymously: /reply {msg_id}",
+                    parse_mode=constants.ParseMode.MARKDOWN
+                )
+            except:
+                pass
 
-            category = verified_users[user_id]["category"]
-            audience = verified_users[user_id]["audience"]
-            msg_id = f"MSG{len(message_inbox)+1}"
-            message_inbox[msg_id] = user_id
-            comfort_queue[msg_id] = []
+    await update.message.reply_text("✅ Your message was posted anonymously.")
+    verified_users[user_id] = True
 
-            group = user_groups[user_id]["group"]
-            targets = [uid for uid, g in user_groups.items()
-                       if audience == "All Flexway" or g["group"] == group]
-
-            for t_id in targets:
-                if t_id != user_id:
-                    try:
-                        await context.bot.send_message(
-                            chat_id=t_id,
-                            text=f"🍵 *{category}* #{msg_id}\n{text}\n\n💬 Reply anonymously: /reply {msg_id}",
-                            parse_mode=constants.ParseMode.MARKDOWN
-                        )
-                    except:
-                        pass
-
-            await update.message.reply_text("✅ Your message was posted anonymously.")
-            verified_users[user_id] = True
-            return
-
-    # Handle /reply MSGID
-    if text.startswith("/reply"):
-        parts = text.split()
-        if len(parts) == 2 and parts[1] in message_inbox:
-            comfort_queue[parts[1]].append((user_id, "Pending reply"))
-            await update.message.reply_text("✏️ Type your anonymous reply now:")
-            return
+async def handle_reply_command(text, user_id, update):
+    parts = text.split()
+    if len(parts) == 2 and parts[1] in message_inbox:
+        comfort_queue[parts[1]].append((user_id, "Pending reply"))
+        await update.message.reply_text("✏️ Type your anonymous reply now:")
+    else:
         await update.message.reply_text("❌ Invalid format. Use /reply MSG1")
-        return
 
-    # Send anonymous reply
+async def handle_pending_reply(user_id, text, context, update):
     for msg_id, replies in comfort_queue.items():
         for i, (uid, status) in enumerate(replies):
             if uid == user_id and status == "Pending reply":
@@ -143,13 +108,51 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 original_user = message_inbox[msg_id]
                 await context.bot.send_message(
                     chat_id=original_user,
-                    text=f"💌 Anonymous reply to #{msg_id}:
-{text}"
+                    text=f"💌 Anonymous reply to #{msg_id}:\n{text}"
                 )
                 await update.message.reply_text("✅ Reply sent anonymously.")
-                return
+                return True
+    return False
 
-# === Register Handlers ===
+# === Message Dispatcher ===
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    text = update.message.text.strip()
+
+    if user_id not in verified_users:
+        await handle_verification(user_id, text, update)
+        return
+
+    if text.lower() == "/spill":
+        await prompt_category(update)
+        return
+
+    if text.isdigit() and int(text) in range(1, len(CATEGORIES)+1):
+        verified_users[user_id] = {"category": CATEGORIES[int(text)-1]}
+        await prompt_audience(update)
+        return
+
+    if isinstance(verified_users[user_id], dict) and "category" in verified_users[user_id]:
+        if text.isdigit() and int(text) in range(1, len(AUDIENCES)+1):
+            verified_users[user_id]["audience"] = AUDIENCES[int(text)-1]
+            await update.message.reply_text("💬 Now type your message to post anonymously:")
+            return
+
+        if "audience" in verified_users[user_id]:
+            if not emotion_shield(text):
+                await update.message.reply_text("⚠️ Please rephrase your message politely.")
+                return
+            await post_message(user_id, text, context, update)
+            return
+
+    if text.startswith("/reply"):
+        await handle_reply_command(text, user_id, update)
+        return
+
+    if await handle_pending_reply(user_id, text, context, update):
+        return
+
+# === Flask Routes ===
 @app.route("/")
 def index():
     return "FlexTea is live ☕️"
@@ -166,7 +169,7 @@ def set_webhook():
     import asyncio
     asyncio.run(bot.set_webhook(WEBHOOK_URL))
 
-# === Launch App ===
+# === Start App ===
 if __name__ == "__main__":
     bot_app = ApplicationBuilder().token(BOT_TOKEN).build()
     bot_app.add_handler(CommandHandler("start", start))
