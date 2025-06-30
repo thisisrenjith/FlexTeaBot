@@ -1,3 +1,9 @@
+
+"""
+FlexTeaBot — Smart. Friendly. Anonymous.
+Created by: Renjith Rajeev (@thisisrenjith)
+"""
+
 from flask import Flask, request
 from telegram import Update, Bot, constants
 from telegram.ext import (
@@ -9,17 +15,21 @@ import logging
 import re
 import asyncio
 
+# === Logging ===
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 
-BOT_TOKEN = "7971742600:AAGUhFXL7m9qyJTuMmmCGOEk-40xC7SpJRg"
+# === Environment Variables ===
+BOT_TOKEN = os.environ.get("BOT_TOKEN")  # Updated to use environment variable
 WEBHOOK_URL = f"https://flextea.onrender.com/webhook/{BOT_TOKEN}"
 
+# === Flask App ===
 app = Flask(__name__)
 bot_app = None
 
+# === In-memory storage ===
 verified_users = {}
 user_groups = {}
 message_inbox = {}
@@ -28,6 +38,7 @@ comfort_queue = {}
 CATEGORIES = ["Gossip", "Suggestion", "Complaint", "Appreciation"]
 AUDIENCES = ["My Office", "A Specific Store", "A Specific Team", "All Flexway"]
 
+# === Utility Functions ===
 def emotion_shield(text):
     rude_words = ["sucks", "hate", "stupid", "idiot", "trash", "useless", "dog"]
     if any(w in text.lower() for w in rude_words):
@@ -36,10 +47,11 @@ def emotion_shield(text):
         return False
     return True
 
+# === Handler Functions ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     msg = (
-        f"👋 Hey {user.first_name or 'there'}!\n"
+        f"\U0001F44B Hey {user.first_name or 'there'}!\n"
         "Welcome to FlexTea 🍵 — your anonymous sharing bot.\n\n"
         "🧽 First, reply with your *Outlet/Team Name* to verify."
     )
@@ -104,6 +116,7 @@ async def handle_pending_reply(user_id, text, context, update):
                 return True
     return False
 
+# === Message Dispatcher ===
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text.strip()
@@ -145,16 +158,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("❓ I didn’t get that. Try /spill to start or type your outlet/team name if new.")
 
+# === Flask Routes ===
 @app.route("/")
 def index():
     return "FlexTea is live ☕️"
 
-@app.route(f"/webhook/{BOT_TOKEN}", methods=["POST"])
+@app.route(f"/webhook/{os.environ.get('BOT_TOKEN')}", methods=["POST"])
 async def telegram_webhook():
     update = Update.de_json(request.get_json(force=True), bot_app.bot)
     await bot_app.process_update(update)
     return {"ok": True}
 
+# === Start App ===
 if __name__ == "__main__":
     async def run():
         global bot_app
