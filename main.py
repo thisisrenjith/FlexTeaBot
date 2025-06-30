@@ -12,6 +12,7 @@ from telegram.ext import (
 import os
 import logging
 import re
+import asyncio
 
 # === Logging ===
 logging.basicConfig(
@@ -20,7 +21,7 @@ logging.basicConfig(
 )
 
 # === Environment Variables ===
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_TOKEN = "7971742600:AAGUhFXL7m9qyJTuMmmCGOEk-40xC7SpJRg"
 WEBHOOK_URL = f"https://flextea.onrender.com/webhook/{BOT_TOKEN}"
 
 # === Flask App ===
@@ -51,7 +52,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = (
         f"👋 Hey {user.first_name or 'there'}!\n"
         "Welcome to FlexTea 🍵 — your anonymous sharing bot.\n\n"
-        "🧭 First, reply with your *Outlet/Team Name* to verify."
+        "🧽 First, reply with your *Outlet/Team Name* to verify."
     )
     await update.message.reply_text(msg, parse_mode=constants.ParseMode.MARKDOWN)
 
@@ -128,7 +129,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if text.isdigit() and int(text) in range(1, len(CATEGORIES)+1):
-        verified_users[user_id] = {"category": CATEGORIES[int(text)-1]}
+        if not isinstance(verified_users[user_id], dict):
+            verified_users[user_id] = {}
+        verified_users[user_id]["category"] = CATEGORIES[int(text)-1]
         await prompt_audience(update)
         return
 
@@ -152,6 +155,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if await handle_pending_reply(user_id, text, context, update):
         return
 
+    await update.message.reply_text("❓ I didn’t get that. Try /spill to start or type your outlet/team name if new.")
+
 # === Flask Routes ===
 @app.route("/")
 def index():
@@ -163,17 +168,30 @@ async def telegram_webhook():
     await bot_app.process_update(update)
     return {"ok": True}
 
-@app.before_first_request
-def set_webhook():
-    bot = Bot(BOT_TOKEN)
-    import asyncio
-    asyncio.run(bot.set_webhook(WEBHOOK_URL))
-
 # === Start App ===
 if __name__ == "__main__":
-    bot_app = ApplicationBuilder().token(BOT_TOKEN).build()
-    bot_app.add_handler(CommandHandler("start", start))
-    bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    async def run():
+        global bot_app
+        bot_app = ApplicationBuilder().token(BOT_TOKEN).build()
+        bot_app.add_handler(CommandHandler("start", start))
+        bot_app.add_handler(MessageHandler(filters.TEXT, handle_message))
 
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+        bot = Bot(BOT_TOKEN)
+        await bot.set_webhook(WEBHOOK_URL)
+
+        # Broadcast update message to Flexway users
+        for uid, group in user_groups.items():
+            if "flexway" in group["group"].lower():
+                try:
+                    await bot.send_message(
+                        chat_id=uid,
+                        text="🍵 Hey there! We've just updated *FlexTea* to a smarter version. Try it out by typing /spill or /start again.\n\nLet’s brew some better ideas!",
+                        parse_mode=constants.ParseMode.MARKDOWN
+                    )
+                except:
+                    pass
+
+        port = int(os.environ.get("PORT", 5000))
+        app.run(host="0.0.0.0", port=port)
+
+    asyncio.run(run())
