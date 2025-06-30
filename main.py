@@ -1,8 +1,3 @@
-"""
-FlexTeaBot — Smart. Friendly. Anonymous.
-Created by: Renjith Rajeev (@thisisrenjith)
-"""
-
 from flask import Flask, request
 from telegram import Update, Bot, constants
 from telegram.ext import (
@@ -14,21 +9,17 @@ import logging
 import re
 import asyncio
 
-# === Logging ===
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 
-# === Environment Variables ===
 BOT_TOKEN = "7971742600:AAGUhFXL7m9qyJTuMmmCGOEk-40xC7SpJRg"
 WEBHOOK_URL = f"https://flextea.onrender.com/webhook/{BOT_TOKEN}"
 
-# === Flask App ===
 app = Flask(__name__)
 bot_app = None
 
-# === In-memory storage ===
 verified_users = {}
 user_groups = {}
 message_inbox = {}
@@ -37,7 +28,6 @@ comfort_queue = {}
 CATEGORIES = ["Gossip", "Suggestion", "Complaint", "Appreciation"]
 AUDIENCES = ["My Office", "A Specific Store", "A Specific Team", "All Flexway"]
 
-# === Utility Functions ===
 def emotion_shield(text):
     rude_words = ["sucks", "hate", "stupid", "idiot", "trash", "useless", "dog"]
     if any(w in text.lower() for w in rude_words):
@@ -46,7 +36,6 @@ def emotion_shield(text):
         return False
     return True
 
-# === Handler Functions ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     msg = (
@@ -115,7 +104,6 @@ async def handle_pending_reply(user_id, text, context, update):
                 return True
     return False
 
-# === Message Dispatcher ===
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text.strip()
@@ -157,7 +145,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("❓ I didn’t get that. Try /spill to start or type your outlet/team name if new.")
 
-# === Flask Routes ===
 @app.route("/")
 def index():
     return "FlexTea is live ☕️"
@@ -168,7 +155,6 @@ async def telegram_webhook():
     await bot_app.process_update(update)
     return {"ok": True}
 
-# === Start App ===
 if __name__ == "__main__":
     async def run():
         global bot_app
@@ -178,18 +164,6 @@ if __name__ == "__main__":
 
         bot = Bot(BOT_TOKEN)
         await bot.set_webhook(WEBHOOK_URL)
-
-        # Broadcast update message to Flexway users
-        for uid, group in user_groups.items():
-            if "flexway" in group["group"].lower():
-                try:
-                    await bot.send_message(
-                        chat_id=uid,
-                        text="🍵 Hey there! We've just updated *FlexTea* to a smarter version. Try it out by typing /spill or /start again.\n\nLet’s brew some better ideas!",
-                        parse_mode=constants.ParseMode.MARKDOWN
-                    )
-                except:
-                    pass
 
         port = int(os.environ.get("PORT", 5000))
         app.run(host="0.0.0.0", port=port)
